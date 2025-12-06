@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Decentralized Web3 Profile - Celo</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
@@ -120,8 +120,8 @@
     </div>
 
     <script>
-        // Contract Configuration
-        const CONTRACT_ADDRESS = "0xYourContractAddressHere"; // Replace with deployed contract address
+        // ================= CONFIG =================
+        const CONTRACT_ADDRESS = "0x4de9ae606d49E533a1a8365d667bC524967ebc4C"; // deployed contract (provided)
         const CONTRACT_ABI = [
             {
                 "inputs": [
@@ -148,8 +148,9 @@
             }
         ];
 
+        // Celo Mainnet configuration
         const CELO_MAINNET = {
-            chainId: '0xA4EC', // 42220 in hex
+            chainId: '0xa4ec', // using lowercase hex to compare reliably
             chainName: 'Celo Mainnet',
             nativeCurrency: {
                 name: 'CELO',
@@ -162,7 +163,18 @@
 
         let provider, signer, contract, userAccount;
 
-        // Connect Wallet and Switch to Celo Mainnet
+        // =============== UI helpers ===============
+        function setConnectUI(addr) {
+            const btn = document.getElementById('connectBtn');
+            btn.textContent = `${addr.slice(0,6)}...${addr.slice(-4)}`;
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            const addressDisplay = document.getElementById('userAddress');
+            addressDisplay.textContent = `${addr.slice(0,6)}...${addr.slice(-4)}`;
+            addressDisplay.classList.remove('hidden');
+        }
+
+        // =============== Wallet connect ===============
         async function connectWallet() {
             try {
                 if (typeof window.ethereum === 'undefined') {
@@ -174,54 +186,61 @@
                 const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 userAccount = accounts[0];
 
-                // Check current chain
-                const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-                
-                // Switch to Celo Mainnet if not already
-                if (chainId !== CELO_MAINNET.chainId) {
+                // Get current chainId and normalize
+                const chainId = (await window.ethereum.request({ method: 'eth_chainId' }) || '').toLowerCase();
+
+                // If not on Celo Mainnet, request switch
+                if (chainId !== CELO_MAINNET.chainId.toLowerCase()) {
                     try {
                         await window.ethereum.request({
                             method: 'wallet_switchEthereumChain',
                             params: [{ chainId: CELO_MAINNET.chainId }],
                         });
                     } catch (switchError) {
-                        // Chain not added, add it
+                        // If chain not added, add it
                         if (switchError.code === 4902) {
-                            await window.ethereum.request({
-                                method: 'wallet_addEthereumChain',
-                                params: [CELO_MAINNET],
-                            });
+                            try {
+                                await window.ethereum.request({
+                                    method: 'wallet_addEthereumChain',
+                                    params: [CELO_MAINNET],
+                                });
+                                // After adding, prompt user to switch by re-calling connect
+                                alert('Celo Mainnet added to MetaMask. Please click Connect Wallet again and approve the network switch.');
+                                return;
+                            } catch (addError) {
+                                console.error('Failed to add Celo:', addError);
+                                alert('Failed to add Celo network to MetaMask.');
+                                return;
+                            }
                         } else {
-                            throw switchError;
+                            console.error('Switch error:', switchError);
+                            alert('Failed to switch network in MetaMask.');
+                            return;
                         }
                     }
                 }
 
-                // Initialize ethers
+                // Initialize ethers provider, signer, contract
                 provider = new ethers.providers.Web3Provider(window.ethereum);
                 signer = provider.getSigner();
                 contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-                // Update UI
-                document.getElementById('connectBtn').textContent = 'Connected';
-                document.getElementById('connectBtn').disabled = true;
-                document.getElementById('connectBtn').classList.add('opacity-50', 'cursor-not-allowed');
-                
-                const addressDisplay = document.getElementById('userAddress');
-                addressDisplay.textContent = `${userAccount.slice(0, 6)}...${userAccount.slice(-4)}`;
-                addressDisplay.classList.remove('hidden');
-
+                setConnectUI(userAccount);
                 console.log('Connected to Celo Mainnet:', userAccount);
+
+                // If view page showing, load profile
+                if (!document.getElementById('viewSection').classList.contains('hidden')) {
+                    displayUserProfile();
+                }
             } catch (error) {
                 console.error('Connection error:', error);
-                alert('Failed to connect wallet: ' + error.message);
+                alert('Failed to connect wallet: ' + (error.message || error));
             }
         }
 
-        // Save Profile to Blockchain
-        async function saveProfile(event) {
-            event.preventDefault();
-            
+        // =============== Save profile ===============
+        async function saveProfile(e) {
+            e.preventDefault();
             if (!contract) {
                 alert('Please connect your wallet first!');
                 return;
@@ -237,47 +256,41 @@
             try {
                 const tx = await contract.setProfile(name, bio, url);
                 statusDiv.innerHTML = '<p class="text-blue-400">⏳ Transaction submitted. Waiting for confirmation...</p>';
-                
                 await tx.wait();
                 statusDiv.innerHTML = '<p class="text-green-400">✅ Profile saved successfully!</p>';
-                
-                setTimeout(() => {
-                    statusDiv.innerHTML = '';
-                }, 5000);
+                setTimeout(() => statusDiv.innerHTML = '', 4500);
             } catch (error) {
                 console.error('Save error:', error);
-                statusDiv.innerHTML = `<p class="text-red-400">❌ Error: ${error.message}</p>`;
+                statusDiv.innerHTML = `<p class="text-red-400">❌ Error: ${error.message || error}</p>`;
             }
         }
 
-        // Load and Display Profile
+        // =============== Load profile ===============
         async function loadProfile(address) {
             if (!contract) {
                 return { exists: false };
             }
-
             try {
-                const profile = await contract.getProfile(address);
+                const result = await contract.getProfile(address);
                 return {
-                    name: profile[0],
-                    bio: profile[1],
-                    portfolioUrl: profile[2],
-                    exists: profile[3]
+                    name: result[0],
+                    bio: result[1],
+                    portfolioUrl: result[2],
+                    exists: result[3]
                 };
             } catch (error) {
-                console.error('Load profile error:', error);
+                console.error('Load profile error', error);
                 return { exists: false };
             }
         }
 
-        // Display Profile in View Section
+        // =============== Display profile ===============
         async function displayUserProfile() {
             if (!userAccount || !contract) {
-                document.getElementById('profileDisplay').innerHTML = 
+                document.getElementById('profileDisplay').innerHTML =
                     '<p class="text-red-400">Please connect your wallet first.</p>';
                 return;
             }
-
             const profile = await loadProfile(userAccount);
             const displayDiv = document.getElementById('profileDisplay');
 
@@ -301,13 +314,11 @@
                     </div>
                 `;
             } else {
-                displayDiv.innerHTML = `
-                    <p class="text-yellow-400">No profile found. Create one in the Edit Profile section!</p>
-                `;
+                displayDiv.innerHTML = '<p class="text-yellow-400">No profile found. Create one in the Edit Profile section!</p>';
             }
         }
 
-        // Search Profile by Address
+        // =============== Search profile ===============
         async function searchProfile() {
             const address = document.getElementById('searchAddress').value.trim();
             const resultDiv = document.getElementById('searchResult');
@@ -323,7 +334,6 @@
             }
 
             resultDiv.innerHTML = '<p class="text-yellow-400">Searching...</p>';
-
             const profile = await loadProfile(address);
 
             if (profile.exists) {
@@ -345,7 +355,7 @@
             }
         }
 
-        // Section Navigation
+        // =============== Navigation ===============
         function showSection(section) {
             document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
             
@@ -359,11 +369,16 @@
             }
         }
 
-        // Handle account/network changes
+        // =============== Handlers ===============
         if (window.ethereum) {
             window.ethereum.on('accountsChanged', (accounts) => {
                 if (accounts.length > 0) {
                     location.reload();
+                } else {
+                    // no accounts - reset UI
+                    userAccount = null;
+                    document.getElementById('connectBtn').textContent = 'Connect Wallet';
+                    document.getElementById('userAddress').classList.add('hidden');
                 }
             });
 
@@ -371,6 +386,9 @@
                 location.reload();
             });
         }
+
+        // init
+        showSection('home');
     </script>
 </body>
 </html>
