@@ -1,394 +1,328 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Decentralized Web3 Profile - Celo</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
-    <style>
-        body {
-            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
-            min-height: 100vh;
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Decentralized Web3 Profile - Celo</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Robust ethers loader with fallbacks (guarantees ethers before app runs) -->
+  <script>
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.async = true;
+        s.onload = () => resolve(src);
+        s.onerror = () => reject(new Error('Failed to load ' + src));
+        document.head.appendChild(s);
+      });
+    }
+
+    (async function ensureEthers() {
+      if (window.ethers) return;
+      const candidates = [
+        'https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js',
+        'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js',
+        'https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js'
+      ];
+      for (const url of candidates) {
+        try {
+          await loadScript(url);
+          if (window.ethers) return;
+        } catch (e) {
+          console.warn('ethers CDN failed:', url, e);
         }
-    </style>
+      }
+      console.error('All ethers CDN attempts failed');
+      alert('Critical: failed to load ethers.js. Please check network / CDN blocking.');
+    })();
+  </script>
+
+  <style>
+    body {
+      background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+      min-height: 100vh;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      color: #e6f6f5;
+    }
+    .btn-primary { background: linear-gradient(90deg,#06b6d4,#0ea5a4); }
+    .btn-primary:hover { transform: scale(1.02); }
+    .panel { background: rgba(17,24,39,0.65); border-radius: 12px; }
+    #statusMessage { max-width: 420px; right: 20px; bottom: 20px; }
+  </style>
 </head>
-<body class="text-gray-100">
-    <!-- Navbar -->
-    <nav class="bg-teal-600 shadow-lg">
-        <div class="container mx-auto px-4 py-4">
-            <div class="flex justify-between items-center">
-                <div class="text-2xl font-bold text-white">🌐 Web3 Profile</div>
-                <div class="flex gap-4 items-center">
-                    <button onclick="showSection('home')" class="px-4 py-2 text-white hover:bg-teal-700 rounded transition">Home</button>
-                    <button onclick="showSection('edit')" class="px-4 py-2 text-white hover:bg-teal-700 rounded transition">Edit Profile</button>
-                    <button onclick="showSection('view')" class="px-4 py-2 text-white hover:bg-teal-700 rounded transition">View Profile</button>
-                    <button id="connectBtn" onclick="connectWallet()" class="px-6 py-2 bg-white text-teal-600 font-semibold rounded-lg hover:bg-gray-100 transition shadow-md">
-                        Connect Wallet
-                    </button>
-                    <span id="userAddress" class="text-sm bg-teal-800 px-3 py-1 rounded hidden"></span>
-                </div>
-            </div>
-        </div>
-    </nav>
+<body>
 
-    <!-- Main Container -->
-    <div class="container mx-auto px-4 py-8">
-        <!-- Home Section -->
-        <div id="homeSection" class="section">
-            <div class="max-w-4xl mx-auto text-center">
-                <h1 class="text-5xl font-bold mb-6 text-teal-400">Welcome to Decentralized Profile</h1>
-                <p class="text-xl mb-8 text-gray-300">Create and manage your professional identity on the Celo blockchain</p>
-                <div class="bg-gray-800 rounded-lg p-8 shadow-xl">
-                    <h2 class="text-2xl font-semibold mb-4 text-teal-300">Search for a Profile</h2>
-                    <div class="flex gap-2">
-                        <input 
-                            type="text" 
-                            id="searchAddress" 
-                            placeholder="Enter Ethereum Address (0x...)"
-                            class="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        />
-                        <button 
-                            onclick="searchProfile()" 
-                            class="px-6 py-3 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition">
-                            Search
-                        </button>
-                    </div>
-                    <div id="searchResult" class="mt-6"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Edit Profile Section -->
-        <div id="editSection" class="section hidden">
-            <div class="max-w-2xl mx-auto">
-                <div class="bg-gray-800 rounded-lg p-8 shadow-xl">
-                    <h2 class="text-3xl font-bold mb-6 text-teal-400">Edit Your Profile</h2>
-                    <form onsubmit="saveProfile(event)" class="space-y-6">
-                        <div>
-                            <label class="block text-sm font-medium mb-2 text-gray-300">Name</label>
-                            <input 
-                                type="text" 
-                                id="profileName" 
-                                required
-                                class="w-full px-4 py-3 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                placeholder="Your full name"
-                            />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-2 text-gray-300">Bio</label>
-                            <textarea 
-                                id="profileBio" 
-                                required
-                                rows="4"
-                                class="w-full px-4 py-3 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                placeholder="Tell us about yourself..."
-                            ></textarea>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-2 text-gray-300">Portfolio URL</label>
-                            <input 
-                                type="url" 
-                                id="profileUrl" 
-                                required
-                                class="w-full px-4 py-3 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                placeholder="https://your-portfolio.com"
-                            />
-                        </div>
-                        <button 
-                            type="submit" 
-                            class="w-full px-6 py-3 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition shadow-lg">
-                            Save Profile to Blockchain
-                        </button>
-                    </form>
-                    <div id="editStatus" class="mt-4 text-center"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- View Profile Section -->
-        <div id="viewSection" class="section hidden">
-            <div class="max-w-2xl mx-auto">
-                <div class="bg-gray-800 rounded-lg p-8 shadow-xl">
-                    <h2 class="text-3xl font-bold mb-6 text-teal-400">Your Profile</h2>
-                    <div id="profileDisplay" class="space-y-4">
-                        <p class="text-gray-400">Loading your profile...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <!-- Navbar -->
+  <nav class="bg-teal-600 shadow-lg">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="text-2xl font-bold text-white">🌐 Web3 Profile</div>
+      <div class="flex items-center gap-3">
+        <button id="btnHome" class="px-3 py-2 text-white hover:bg-teal-700 rounded">Home</button>
+        <button id="btnEdit" class="px-3 py-2 text-white hover:bg-teal-700 rounded">Edit Profile</button>
+        <button id="btnView" class="px-3 py-2 text-white hover:bg-teal-700 rounded">View Profile</button>
+        <button id="connectBtn" class="px-4 py-2 bg-white text-teal-600 font-semibold rounded-lg shadow">Connect Wallet</button>
+        <span id="userAddress" class="text-sm bg-teal-800 px-3 py-1 rounded hidden text-white"></span>
+      </div>
     </div>
+  </nav>
 
-    <script>
-        // ================= CONFIG =================
-        const CONTRACT_ADDRESS = "0x4de9ae606d49E533a1a8365d667bC524967ebc4C"; // deployed contract (provided)
-        const CONTRACT_ABI = [
-            {
-                "inputs": [
-                    {"internalType": "string", "name": "_name", "type": "string"},
-                    {"internalType": "string", "name": "_bio", "type": "string"},
-                    {"internalType": "string", "name": "_portfolioUrl", "type": "string"}
-                ],
-                "name": "setProfile",
-                "outputs": [],
-                "stateMutability": "nonpayable",
-                "type": "function"
-            },
-            {
-                "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
-                "name": "getProfile",
-                "outputs": [
-                    {"internalType": "string", "name": "", "type": "string"},
-                    {"internalType": "string", "name": "", "type": "string"},
-                    {"internalType": "string", "name": "", "type": "string"},
-                    {"internalType": "bool", "name": "", "type": "bool"}
-                ],
-                "stateMutability": "view",
-                "type": "function"
-            }
-        ];
+  <!-- Main -->
+  <main class="container mx-auto px-4 py-8">
+    <!-- Home -->
+    <section id="homeSection" class="section">
+      <div class="max-w-4xl mx-auto text-center">
+        <h1 class="text-4xl font-bold mb-4 text-teal-300">Decentralized Profile (Celo)</h1>
+        <p class="text-lg text-gray-300 mb-6">Create and manage your professional identity on the Celo blockchain.</p>
 
-        // Celo Mainnet configuration
-        const CELO_MAINNET = {
-            chainId: '0xa4ec', // using lowercase hex to compare reliably
-            chainName: 'Celo Mainnet',
-            nativeCurrency: {
-                name: 'CELO',
-                symbol: 'CELO',
-                decimals: 18
-            },
-            rpcUrls: ['https://forno.celo.org'],
-            blockExplorerUrls: ['https://explorer.celo.org']
-        };
+        <div class="panel p-6">
+          <h2 class="text-2xl font-semibold text-teal-200 mb-4">Search for a Profile</h2>
+          <div class="flex gap-2">
+            <input id="searchAddress" type="text" placeholder="Enter address (0x...)" class="flex-1 px-4 py-3 bg-gray-700 rounded focus:outline-none"/>
+            <button id="searchBtn" class="px-5 py-3 btn-primary rounded text-white font-semibold">Search</button>
+          </div>
+          <div id="searchResult" class="mt-4"></div>
+        </div>
+      </div>
+    </section>
 
-        let provider, signer, contract, userAccount;
+    <!-- Edit -->
+    <section id="editSection" class="section hidden mt-8">
+      <div class="max-w-2xl mx-auto">
+        <div class="panel p-6 shadow-lg">
+          <h2 class="text-2xl font-bold text-teal-200 mb-4">Edit Your Profile</h2>
+          <form id="profileForm" class="space-y-4">
+            <input id="profileName" placeholder="Full name" required class="w-full px-4 py-3 bg-gray-800 rounded"/>
+            <textarea id="profileBio" placeholder="Short bio" rows="4" required class="w-full px-4 py-3 bg-gray-800 rounded"></textarea>
+            <input id="profileUrl" placeholder="Portfolio URL" type="url" required class="w-full px-4 py-3 bg-gray-800 rounded"/>
+            <button type="submit" id="saveProfileBtn" class="w-full btn-primary py-3 rounded text-white font-semibold">Save Profile to Blockchain</button>
+            <div id="editStatus" class="mt-3 text-center"></div>
+          </form>
+        </div>
+      </div>
+    </section>
 
-        // =============== UI helpers ===============
-        function setConnectUI(addr) {
-            const btn = document.getElementById('connectBtn');
-            btn.textContent = `${addr.slice(0,6)}...${addr.slice(-4)}`;
-            btn.disabled = true;
-            btn.classList.add('opacity-50', 'cursor-not-allowed');
-            const addressDisplay = document.getElementById('userAddress');
-            addressDisplay.textContent = `${addr.slice(0,6)}...${addr.slice(-4)}`;
-            addressDisplay.classList.remove('hidden');
+    <!-- View -->
+    <section id="viewSection" class="section hidden mt-8">
+      <div class="max-w-2xl mx-auto">
+        <div class="panel p-6 shadow-lg">
+          <h2 class="text-2xl font-bold text-teal-200 mb-4">Profile</h2>
+          <div id="profileDisplay" class="text-gray-200">Connect wallet and view your profile here.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Status -->
+  <div id="statusMessage" class="fixed bottom-6 right-6 hidden p-4 rounded shadow bg-white text-slate-800">
+    <div id="statusText"></div>
+  </div>
+
+  <!-- App script (waits for ethers then initializes) -->
+  <script>
+    (function waitForEthersAndInit() {
+      const timeout = 6000;
+      const start = Date.now();
+      (function check() {
+        if (typeof window.ethers !== 'undefined') return initApp();
+        if (Date.now() - start < timeout) return setTimeout(check, 100);
+        console.error('ethers.js not loaded');
+        alert('Critical: ethers.js failed to load. Please check network / CDN blocking.');
+      })();
+    })();
+
+    function initApp() {
+      // CONFIG
+      const CONTRACT_ADDRESS = "0x4de9ae606d49E533a1a8365d667bC524967ebc4C";
+      const CONTRACT_ABI = [
+        {"inputs":[{"internalType":"string","name":"_name","type":"string"},{"internalType":"string","name":"_bio","type":"string"},{"internalType":"string","name":"_portfolioUrl","type":"string"}],"name":"setProfile","outputs":[],"stateMutability":"nonpayable","type":"function"},
+        {"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getProfile","outputs":[{"internalType":"string","name":"","type":"string"},{"internalType":"string","name":"","type":"string"},{"internalType":"string","name":"","type":"string"},{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"}
+      ];
+      const CELO_MAINNET = { chainId: '0xa4ec', chainName: 'Celo Mainnet', nativeCurrency:{name:'CELO',symbol:'CELO',decimals:18}, rpcUrls:['https://forno.celo.org'], blockExplorerUrls:['https://explorer.celo.org'] };
+
+      let provider = null;
+      let signer = null;
+      let contract = null;
+      let userAccount = null;
+
+      // UI helpers
+      const statusEl = document.getElementById('statusMessage');
+      const statusText = document.getElementById('statusText');
+      function showStatus(msg, type='info', ttl=4000) {
+        statusText.textContent = msg;
+        statusEl.classList.remove('hidden', 'bg-blue-100', 'bg-green-100', 'bg-red-100');
+        statusEl.classList.add(type === 'success' ? 'bg-green-100' : type === 'error' ? 'bg-red-100' : 'bg-blue-100');
+        clearTimeout(window._statusTimer);
+        window._statusTimer = setTimeout(() => statusEl.classList.add('hidden'), ttl);
+      }
+
+      function showSection(section) {
+        document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+        if (section === 'home') document.getElementById('homeSection').classList.remove('hidden');
+        if (section === 'edit') document.getElementById('editSection').classList.remove('hidden');
+        if (section === 'view') {
+          document.getElementById('viewSection').classList.remove('hidden');
+          displayUserProfile();
         }
+      }
 
-        // =============== Wallet connect ===============
-        async function connectWallet() {
+      // DIRECT MetaMask connect (exact behavior like Skill-NFT)
+      async function connectWallet() {
+        try {
+          if (!window.ethereum) {
+            showStatus('No injected wallet found. Please install MetaMask.', 'error', 6000);
+            return;
+          }
+          showStatus('Requesting wallet connection...', 'info');
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          if (!accounts || accounts.length === 0) throw new Error('No accounts');
+          userAccount = accounts[0];
+
+          provider = new ethers.providers.Web3Provider(window.ethereum);
+          signer = provider.getSigner();
+
+          const net = await provider.getNetwork();
+          if (net.chainId !== 42220) {
             try {
-                if (typeof window.ethereum === 'undefined') {
-                    alert('MetaMask is not installed! Please install it to use this DApp.');
-                    return;
+              await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CELO_MAINNET.chainId }] });
+              // re-init after switch
+              provider = new ethers.providers.Web3Provider(window.ethereum);
+              signer = provider.getSigner();
+              showStatus('Switched to Celo. Finalizing connection...', 'info', 5000);
+            } catch (switchErr) {
+              if (switchErr && switchErr.code === 4902) {
+                try {
+                  await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [CELO_MAINNET] });
+                  showStatus('Celo network added. Please approve switch and click Connect again.', 'info', 7000);
+                  return;
+                } catch (addErr) {
+                  console.error('Add chain failed', addErr);
+                  showStatus('Failed to add Celo network.', 'error', 6000);
+                  return;
                 }
-
-                // Request account access
-                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                userAccount = accounts[0];
-
-                // Get current chainId and normalize
-                const chainId = (await window.ethereum.request({ method: 'eth_chainId' }) || '').toLowerCase();
-
-                // If not on Celo Mainnet, request switch
-                if (chainId !== CELO_MAINNET.chainId.toLowerCase()) {
-                    try {
-                        await window.ethereum.request({
-                            method: 'wallet_switchEthereumChain',
-                            params: [{ chainId: CELO_MAINNET.chainId }],
-                        });
-                    } catch (switchError) {
-                        // If chain not added, add it
-                        if (switchError.code === 4902) {
-                            try {
-                                await window.ethereum.request({
-                                    method: 'wallet_addEthereumChain',
-                                    params: [CELO_MAINNET],
-                                });
-                                // After adding, prompt user to switch by re-calling connect
-                                alert('Celo Mainnet added to MetaMask. Please click Connect Wallet again and approve the network switch.');
-                                return;
-                            } catch (addError) {
-                                console.error('Failed to add Celo:', addError);
-                                alert('Failed to add Celo network to MetaMask.');
-                                return;
-                            }
-                        } else {
-                            console.error('Switch error:', switchError);
-                            alert('Failed to switch network in MetaMask.');
-                            return;
-                        }
-                    }
-                }
-
-                // Initialize ethers provider, signer, contract
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                signer = provider.getSigner();
-                contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
-                setConnectUI(userAccount);
-                console.log('Connected to Celo Mainnet:', userAccount);
-
-                // If view page showing, load profile
-                if (!document.getElementById('viewSection').classList.contains('hidden')) {
-                    displayUserProfile();
-                }
-            } catch (error) {
-                console.error('Connection error:', error);
-                alert('Failed to connect wallet: ' + (error.message || error));
-            }
-        }
-
-        // =============== Save profile ===============
-        async function saveProfile(e) {
-            e.preventDefault();
-            if (!contract) {
-                alert('Please connect your wallet first!');
+              } else {
+                console.error('Switch error', switchErr);
+                showStatus('Failed to switch network. Please switch to Celo manually.', 'error', 6000);
                 return;
+              }
             }
+          }
 
-            const name = document.getElementById('profileName').value;
-            const bio = document.getElementById('profileBio').value;
-            const url = document.getElementById('profileUrl').value;
+          // Initialize contract
+          contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-            const statusDiv = document.getElementById('editStatus');
-            statusDiv.innerHTML = '<p class="text-yellow-400">⏳ Saving to blockchain...</p>';
+          // Update UI
+          document.getElementById('connectBtn').textContent = `${userAccount.slice(0,6)}...${userAccount.slice(-4)}`;
+          document.getElementById('connectBtn').disabled = true;
+          document.getElementById('connectBtn').classList.add('opacity-60');
+          document.getElementById('userAddress').textContent = `${userAccount.slice(0,6)}...${userAccount.slice(-4)}`;
+          document.getElementById('userAddress').classList.remove('hidden');
 
-            try {
-                const tx = await contract.setProfile(name, bio, url);
-                statusDiv.innerHTML = '<p class="text-blue-400">⏳ Transaction submitted. Waiting for confirmation...</p>';
-                await tx.wait();
-                statusDiv.innerHTML = '<p class="text-green-400">✅ Profile saved successfully!</p>';
-                setTimeout(() => statusDiv.innerHTML = '', 4500);
-            } catch (error) {
-                console.error('Save error:', error);
-                statusDiv.innerHTML = `<p class="text-red-400">❌ Error: ${error.message || error}</p>`;
-            }
+          showStatus('Connected to Celo Mainnet ✅', 'success', 3000);
+        } catch (err) {
+          console.error('connectWallet error', err);
+          showStatus('Failed to connect wallet: ' + (err.reason || err.message || err), 'error', 7000);
         }
+      }
 
-        // =============== Load profile ===============
-        async function loadProfile(address) {
-            if (!contract) {
-                return { exists: false };
-            }
-            try {
-                const result = await contract.getProfile(address);
-                return {
-                    name: result[0],
-                    bio: result[1],
-                    portfolioUrl: result[2],
-                    exists: result[3]
-                };
-            } catch (error) {
-                console.error('Load profile error', error);
-                return { exists: false };
-            }
+      async function saveProfile(e) {
+        e.preventDefault();
+        if (!contract) { showStatus('Connect wallet first.', 'error', 3000); return; }
+        const name = document.getElementById('profileName').value.trim();
+        const bio = document.getElementById('profileBio').value.trim();
+        const url = document.getElementById('profileUrl').value.trim();
+        const status = document.getElementById('editStatus');
+        status.innerHTML = '<p class="text-yellow-300">Submitting transaction...</p>';
+        try {
+          const tx = await contract.setProfile(name, bio, url);
+          status.innerHTML = '<p class="text-blue-300">Waiting for confirmation...</p>';
+          await tx.wait();
+          status.innerHTML = '<p class="text-green-300">Profile saved successfully ✅</p>';
+          setTimeout(() => status.innerHTML = '', 4000);
+        } catch (err) {
+          console.error('saveProfile error', err);
+          status.innerHTML = `<p class="text-red-400">Error: ${err.reason || err.message || err}</p>`;
         }
+      }
 
-        // =============== Display profile ===============
-        async function displayUserProfile() {
-            if (!userAccount || !contract) {
-                document.getElementById('profileDisplay').innerHTML =
-                    '<p class="text-red-400">Please connect your wallet first.</p>';
-                return;
-            }
-            const profile = await loadProfile(userAccount);
-            const displayDiv = document.getElementById('profileDisplay');
-
-            if (profile.exists) {
-                displayDiv.innerHTML = `
-                    <div class="space-y-4">
-                        <div class="border-b border-gray-700 pb-4">
-                            <h3 class="text-xl font-semibold text-teal-300 mb-2">Name</h3>
-                            <p class="text-white">${profile.name}</p>
-                        </div>
-                        <div class="border-b border-gray-700 pb-4">
-                            <h3 class="text-xl font-semibold text-teal-300 mb-2">Bio</h3>
-                            <p class="text-white">${profile.bio}</p>
-                        </div>
-                        <div class="border-b border-gray-700 pb-4">
-                            <h3 class="text-xl font-semibold text-teal-300 mb-2">Portfolio</h3>
-                            <a href="${profile.portfolioUrl}" target="_blank" class="text-teal-400 hover:text-teal-300 underline">
-                                ${profile.portfolioUrl}
-                            </a>
-                        </div>
-                    </div>
-                `;
-            } else {
-                displayDiv.innerHTML = '<p class="text-yellow-400">No profile found. Create one in the Edit Profile section!</p>';
-            }
+      async function loadProfile(address) {
+        if (!contract) return { exists: false };
+        try {
+          const res = await contract.getProfile(address);
+          return { name: res[0], bio: res[1], portfolioUrl: res[2], exists: res[3] };
+        } catch (err) {
+          console.error('loadProfile error', err);
+          return { exists: false };
         }
+      }
 
-        // =============== Search profile ===============
-        async function searchProfile() {
-            const address = document.getElementById('searchAddress').value.trim();
-            const resultDiv = document.getElementById('searchResult');
-
-            if (!address || !ethers.utils.isAddress(address)) {
-                resultDiv.innerHTML = '<p class="text-red-400">Please enter a valid Ethereum address.</p>';
-                return;
-            }
-
-            if (!contract) {
-                resultDiv.innerHTML = '<p class="text-red-400">Please connect your wallet first.</p>';
-                return;
-            }
-
-            resultDiv.innerHTML = '<p class="text-yellow-400">Searching...</p>';
-            const profile = await loadProfile(address);
-
-            if (profile.exists) {
-                resultDiv.innerHTML = `
-                    <div class="bg-gray-700 rounded-lg p-6 text-left space-y-3">
-                        <h3 class="text-2xl font-bold text-teal-300">${profile.name}</h3>
-                        <p class="text-gray-300"><strong class="text-teal-400">Address:</strong> ${address}</p>
-                        <p class="text-gray-300"><strong class="text-teal-400">Bio:</strong> ${profile.bio}</p>
-                        <p class="text-gray-300">
-                            <strong class="text-teal-400">Portfolio:</strong> 
-                            <a href="${profile.portfolioUrl}" target="_blank" class="text-teal-400 hover:text-teal-300 underline ml-2">
-                                ${profile.portfolioUrl}
-                            </a>
-                        </p>
-                    </div>
-                `;
-            } else {
-                resultDiv.innerHTML = '<p class="text-yellow-400">No profile found for this address.</p>';
-            }
+      async function displayUserProfile() {
+        const disp = document.getElementById('profileDisplay');
+        if (!userAccount || !contract) { disp.innerHTML = '<p class="text-yellow-300">Please connect your wallet first.</p>'; return; }
+        showStatus('Loading profile...', 'info', 2500);
+        const p = await loadProfile(userAccount);
+        if (!p.exists) {
+          disp.innerHTML = '<p class="text-yellow-300">No profile found. Create one in Edit Profile.</p>';
+          return;
         }
+        disp.innerHTML = `
+          <div class="space-y-4">
+            <div><h3 class="text-teal-200 font-semibold">Name</h3><div class="text-white">${p.name}</div></div>
+            <div><h3 class="text-teal-200 font-semibold">Bio</h3><div class="text-white">${p.bio}</div></div>
+            <div><h3 class="text-teal-200 font-semibold">Portfolio</h3><a href="${p.portfolioUrl}" target="_blank" class="text-teal-300 underline">${p.portfolioUrl}</a></div>
+          </div>
+        `;
+      }
 
-        // =============== Navigation ===============
-        function showSection(section) {
-            document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
-            
-            if (section === 'home') {
-                document.getElementById('homeSection').classList.remove('hidden');
-            } else if (section === 'edit') {
-                document.getElementById('editSection').classList.remove('hidden');
-            } else if (section === 'view') {
-                document.getElementById('viewSection').classList.remove('hidden');
-                displayUserProfile();
-            }
+      async function searchProfile() {
+        const addr = document.getElementById('searchAddress').value.trim();
+        const out = document.getElementById('searchResult');
+        out.innerHTML = '';
+        if (!addr || !ethers.utils.isAddress(addr)) { out.innerHTML = '<p class="text-red-400">Enter a valid address.</p>'; return; }
+        // Read-only provider for search (no need to force connect)
+        try {
+          const readProvider = new ethers.providers.JsonRpcProvider('https://forno.celo.org');
+          const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, readProvider);
+          out.innerHTML = '<p class="text-yellow-300">Searching...</p>';
+          const res = await readContract.getProfile(addr);
+          const p = { name: res[0], bio: res[1], portfolioUrl: res[2], exists: res[3] };
+          if (!p.exists) out.innerHTML = '<p class="text-yellow-300">No profile found for this address.</p>';
+          else out.innerHTML = `<div class="bg-gray-800 p-4 rounded"><h3 class="text-teal-200 font-semibold">${p.name}</h3><p class="text-gray-300">${p.bio}</p><a class="text-teal-300 underline" href="${p.portfolioUrl}" target="_blank">${p.portfolioUrl}</a></div>`;
+        } catch (err) {
+          console.error('searchProfile error', err);
+          out.innerHTML = '<p class="text-red-400">Failed to load profile.</p>';
         }
+      }
 
-        // =============== Handlers ===============
-        if (window.ethereum) {
-            window.ethereum.on('accountsChanged', (accounts) => {
-                if (accounts.length > 0) {
-                    location.reload();
-                } else {
-                    // no accounts - reset UI
-                    userAccount = null;
-                    document.getElementById('connectBtn').textContent = 'Connect Wallet';
-                    document.getElementById('userAddress').classList.add('hidden');
-                }
-            });
+      // Bind events
+      document.getElementById('btnHome').addEventListener('click', () => showSection('home'));
+      document.getElementById('btnEdit').addEventListener('click', () => showSection('edit'));
+      document.getElementById('btnView').addEventListener('click', () => showSection('view'));
+      document.getElementById('connectBtn').addEventListener('click', connectWallet);
+      document.getElementById('profileForm').addEventListener('submit', saveProfile);
+      document.getElementById('searchBtn').addEventListener('click', searchProfile);
 
-            window.ethereum.on('chainChanged', () => {
-                location.reload();
-            });
-        }
+      // Wallet change handlers
+      if (window.ethereum) {
+        window.ethereum.on('accountsChanged', (accounts) => {
+          if (!accounts || accounts.length === 0) {
+            userAccount = null;
+            document.getElementById('connectBtn').textContent = 'Connect Wallet';
+            document.getElementById('userAddress').classList.add('hidden');
+            showStatus('Wallet disconnected', 'info', 2500);
+          } else {
+            location.reload();
+          }
+        });
+        window.ethereum.on('chainChanged', () => location.reload());
+      }
 
-        // init
-        showSection('home');
-    </script>
+      // Default view
+      showSection('home');
+    } // end initApp
+  </script>
 </body>
 </html>
